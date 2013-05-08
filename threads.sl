@@ -146,7 +146,8 @@ public define thread(){
     }
     else if (pid==0){
 	signal(SIGINT,&thread_handle_int);
-	try {
+	variable err;
+	try (err){
 	    if (_featurep("rand") && is_defined("srand")){
 		()=_update_random_seed;
 	    }
@@ -158,9 +159,19 @@ public define thread(){
 	    %
 	    (@fun)(__push_list(args));
 	    retval=__pop_list(_stkdepth);
+	    %
+	    % The return value is actually a struct that can be probed
+	    % to get the threads return status
+	    % 
+	    retval=struct{ err=0, value=retval };
 	}
 	catch AnyError: {
-	    retval=NULL;
+	    %
+	    % Upon error, return the error structure which contains
+	    % the error and message so main thread can rais infomative
+	    % exception
+	    % 
+	    retval=struct{ err=1, value=err };
 	}
 	if (send_msg(s2,retval)!=1){
 	    ()=close(s2);
@@ -272,11 +283,14 @@ public define thread_join(){
     % no need to get exit status
     % 
     ()=close(thread.fd);
-    if (ret==NULL){
-	thread.stat=-1;
-	return NULL;
+    if (ret.err){
+	variable err=ret.value;
+	thread.stat=0;
+	throw err.error,
+	      sprintf("%s\n%s:%d:%s:%s",
+	       err.descr,err.file,err.line,err.function,err.message);
     }
-    __push_list(ret);
+    __push_list(ret.value);
 }
 
 public define thread_select(){

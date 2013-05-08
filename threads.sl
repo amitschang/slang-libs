@@ -258,6 +258,14 @@ public define thread_stop(){
         timeout=();
     variable tids=();
     variable t;
+    foreach t ([tids]){
+	%
+	% We are making sure to kill, and do certainly do not need the
+	% fd anymore.
+	% 
+	t.stat=1;
+	()=close(t.fd);
+    }
     if (not blocking){
 	t=thread(&_thread_stop,tids,timeout);
 	%
@@ -268,7 +276,6 @@ public define thread_stop(){
     else {
 	_thread_stop(tids,timeout);
     }
-    foreach t ([tids]) t.stat=1;
 }
 
 public define thread_join(){

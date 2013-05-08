@@ -110,13 +110,17 @@ private define _xmatch_thread() {
     variable nthr=();
     variable indx=();
     variable l,mn,mx;
-    if (is_struct_type(args[0])){
+    if (is_struct_type(args[0]))
 	l=length(get_struct_field(args[0],get_struct_field_names(args[0])[0]));
-	mn=indx*l/nthr;
-	mx=(indx+1)*l/nthr-1;
-	if (indx==(nthr-1)) mx=l-1;
-	struct_filter(args[0],[mn:mx]);
-    }
+    else
+        l=length(args[0]);
+    mn=indx*l/nthr;
+    mx=(indx+1)*l/nthr-1;
+    if (indx==(nthr-1)) mx=l-1;
+    if (is_struct_type(args[0]))
+        struct_filter(args[0],[mn:mx]);
+    else
+        args[0]=args[0][[mn:mx]];
     variable ret=_xmatch(expr,__push_list(args));
     ret[0]+=mn;
     return ret;
@@ -125,7 +129,8 @@ private define _xmatch_thread() {
 define xmatch() {
     variable i,j,_tmp,ret;
     variable args=__pop_list(_NARGS);
-    if (not qualifier_exists("nothreads") && _NUM_CPU > 1){
+    variable ncpu=qualifier("ncpu",_NUM_CPU);
+    if (not qualifier_exists("nothreads") && ncpu > 1){
 	variable thr=Thread_Type[_NUM_CPU];
 	_for i (0,_ncpu-1,1){
 	    thr[i]=thread(&_xmatch_thread,i,_NUM_CPU,__push_list(args));

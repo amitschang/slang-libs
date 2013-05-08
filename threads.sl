@@ -6,6 +6,7 @@ require("sysconf");
 
 private variable TID=0; % master tid = 0
 private variable BUFFER_SIZE=8192;
+private variable _NUM_CPU; % forward declaration
 
 typedef struct {
     tid,
@@ -131,9 +132,14 @@ public define thread(){
     %
     (s1,s2)=socketpair(AF_UNIX,SOCK_STREAM,0);
     %
-    % fork off the process
+    % fork off the process. Ignore the child signal, we do not need to
+    % reap the results, since the return value, communicated via the
+    % socket channel, will indicate an error.
     %
-    % signal(SIGCHLD,SIG_IGN);
+    signal(SIGCHLD,SIG_IGN);
+    %
+    % PID will tell us if we are child or parent
+    % 
     variable pid=fork();
     if (pid<0){
 	throw AnyError,"could not create thread process";
@@ -171,24 +177,113 @@ public define thread(){
     }
 }
 
+private define _thread_stop(){
+    %
+    % this is the blocking version of thread stop. Args 1,2 same as
+    % thread_stop
+    %
+    variable dt=0.05;
+    variable timeout=();
+    variable tids=();
+    if (typeof(tids)!=Array_Type) tids=[tids];
+    variable exited=Int_Type[length(tids)];
+    %
+    % loop through threads, killing with SIGTERM
+    %
+    variable i;
+    _for i (0,length(tids)-1,1){
+	if (tids[i].stat==NULL){
+	    ()=kill(tids[i].pid,SIGTERM);
+	    ()=close(tids[i].fd);
+	}
+	else
+	    exited[i]=1;
+    }
+    variable alive,stat;
+    while (timeout>0){
+	alive=where(exited==0);
+	_for i (0,length(alive)-1,1){
+	    stat=waitpid(tids[alive[i]].pid,WNOHANG);
+	    if (stat==NULL)
+	        exited[alive[i]]=1;
+	    else if (stat.pid!=0)
+		exited[alive[i]]=1;
+	}
+	if (length(alive)==0) break;
+	sleep(dt);
+	timeout-=dt;
+    }
+    %
+    % Finally, really kill any ones left
+    % 
+    alive=where(exited==0);
+    _for i (0,length(alive)-1,1){
+	()=kill(tids[alive[i]].pid,SIGKILL);
+	()=waitpid(tids[alive[i]].pid,0);
+    }
+}
+
+public define thread_stop(){
+    %
+    % This function will terminate one or more threads. First input
+    % argument is either a single thread or an array of threads to
+    % terminate. The second (optional) argument is a timeout (in
+    % seconds, default 10) before sending a harsher SIGKILL signal
+    % (first attempt is a SIGTERM). The third argument is a bolean
+    % telling whether to block (1) or not block (0, default). In
+    % non-blocking mode, the function uses a thread to kill the
+    % threads (ha!) and returns immediately - the calling program can
+    % only be assured the threads will have been killed by timeout
+    % seconds. In blocking mode the function will only return when all
+    % threads have been successfully terminated. All threads will be
+    % marked as completed with status of 1 even in blocking mode, to
+    % prevent them from being joined later.
+    % 
+    variable blocking=0;
+    variable timeout=10;
+    if (_NARGS==3)
+        blocking=();
+    if (_NARGS>=2)
+        timeout=();
+    variable tids=();
+    variable t;
+    if (not blocking){
+	t=thread(&_thread_stop,tids,timeout);
+	%
+	% We will not join this thread
+	% 
+	()=close(t.fd);
+    }
+    else {
+	_thread_stop(tids,timeout);
+    }
+    foreach t ([tids]) t.stat=1;
+}
+
 public define thread_join(){
     variable thread=();
     if (thread.stat!=NULL){
 	error("Thread already joined");
     }
     variable ret=recv_msg(thread.fd);
-    variable stat=waitpid(thread.pid,WNOHANG);
-    if (typeof(stat)==Struct_Type){
-	thread.stat=stat.exit_status;
-    }
-    else {
-	thread.stat=-1;
-    }
+    %
+    % We don't need the waitpid, because we ignore the sigchld. the
+    % success of the thread can be gleaned from the message recieved,
+    % no need to get exit status
+    % 
     ()=close(thread.fd);
+    if (ret==NULL){
+	thread.stat=-1;
+	return NULL;
+    }
     __push_list(ret);
 }
 
 public define thread_select(){
+    %
+    % Select one or more threads from a list whose return value is
+    % ready to read.
+    % 
     variable threads=();
     if (typeof(threads)!=Array_Type || _typeof(threads)!=Thread_Type){
 	return -1;
@@ -214,7 +309,7 @@ public define thread_map(){
     variable args=__pop_list(_NARGS-2);
     variable func=();
     variable type=();
-    variable nthr=qualifier("ncpu",_ncpu);
+    variable nthr=qualifier("ncpu",_NUM_CPU);
     %
     % find the argument that indexes threads, this is the first
     % argument with a non-unity length
@@ -443,6 +538,6 @@ public define queue_get(){
     return recv_msg(queue.out);
 }
 
-variable _NUM_CPU=_ncpu;
+_NUM_CPU=_ncpu;
 
 provide("threads");

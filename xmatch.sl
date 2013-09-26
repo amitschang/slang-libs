@@ -117,8 +117,13 @@ private define _xmatch_thread() {
     mn=indx*l/nthr;
     mx=(indx+1)*l/nthr-1;
     if (indx==(nthr-1)) mx=l-1;
+    %
+    % Make the local thread specific copy of array argument 1, which
+    % is based on the above calculated thread position. We should copy
+    % here in case a cross match is done to itself
+    % 
     if (is_struct_type(args[0]))
-        struct_filter(args[0],[mn:mx]);
+        args[0]=struct_filter(args[0],[mn:mx];copy);
     else
         args[0]=args[0][[mn:mx]];
     variable ret=_xmatch(expr,__push_list(args));
@@ -131,12 +136,12 @@ define xmatch() {
     variable args=__pop_list(_NARGS);
     variable ncpu=qualifier("ncpu",_NUM_CPU);
     if (not qualifier_exists("nothreads") && ncpu > 1){
-	variable thr=Thread_Type[_NUM_CPU];
-	_for i (0,_ncpu-1,1){
+	variable thr=Thread_Type[ncpu];
+	_for i (0,ncpu-1,1){
 	    thr[i]=thread(&_xmatch_thread,i,_NUM_CPU,__push_list(args));
 	}
 	ret=thread_join(thr[0]);
-	_for i (1,_NUM_CPU-1,1){
+	_for i (1,ncpu-1,1){
 	    _tmp=thread_join(thr[i]);
 	    if (_tmp==NULL){
 		error("Thread returned error status, please check conditional");

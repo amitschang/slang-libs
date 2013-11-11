@@ -6,7 +6,7 @@ require("sysconf");
 
 private variable TID=0; % master tid = 0
 private variable BUFFER_SIZE=8192;
-private variable _NUM_CPU; % forward declaration
+public variable _NUM_CPU; % forward declaration
 
 typedef struct {
     tid,

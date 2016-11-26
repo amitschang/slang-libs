@@ -1,0 +1,67 @@
+xmatch
+
+ SYNOPSIS
+  Cross match two or more tables
+
+ USAGE
+  List_Type xmatch( Strint_Type expr, Struct_Type|Array_Type, ...)
+
+ DESCRIPTION
+  Returns the indeces of each respective input data table (either
+  struct type or array) which match the conditions in expr. Expression
+  is a string of the following form (for example):
+
+    "sqrt(sqr(A.ra-B.ra)+sqr(A.dec-B.dec))<0.001"
+
+  In this case, this is a celestial distance metric for small
+  angles. A is the first input struct or array table and B is the
+  second. To be successful, each must have the fields named "ra" and
+  "dec". Any number of tables are supported (up to 26). Where an
+  argument is an array instead of struct, only the alpha character is
+  used. Structs should be used, however, when data are paired. For
+  example, if the above was replaced with:
+
+    "sqrt(sqr(A-B)+sqr(C-D))<0.001"
+
+  This would work, but result in completely different behaviour, since
+  all permutations of A, B, C, and D will be tested, rather than
+  permutations of (A,B) and (C,D). The return value is a list, with
+  each component an index array corresponding to the ith data
+  argument. For example if the return looks like:
+
+    > return[0][0];
+    10
+    > return[1][0];
+    24
+    > return[2][0];
+    122
+
+  means that the combination of 10th item in first arg, 24th item in
+  second arg and 122nd item in 3rd arg satisfied the input
+  condition. Cross matching supports threads, and is very fast when
+  the returned set is sparse (not many matches), but can be
+  computationally intesive when more matches exist.
+
+ SEE ALSO
+  xmatch_sky
+
+--------------------------------------------------------------
+
+xmatch_sky
+
+ SYNOPSIS
+  Cross match two or more tables on sky position
+
+ USAGE
+  LIst_Type xmatch_sky( Double_Type tol, args )
+
+ DESCRIPTION
+  Cross match tables to within tol degrees to two or more tables whose
+  struct fields "ra" and "dec" represent right ascension and
+  declination in degrees. A suitable tolerance might be 0.001 degrees,
+  or even 1" (1/3600.). Output is as in `xmatch'
+
+ SEE ALSO
+  xmatch
+
+--------------------------------------------------------------

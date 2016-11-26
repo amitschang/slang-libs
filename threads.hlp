@@ -1,0 +1,183 @@
+threads
+
+ SYNOPSIS
+  Execute a function in an asynchronous thread of control
+
+ USAGE
+  Thread_Type thread(Ref_Type function, [Any_Type arg, ...])
+
+ DESCRIPTION
+  The `thread' function forks off a subprocess of the calling thread,
+  runs the function referred to by the `function' argument, and
+  communicates the result back to the caller. The result can be
+  obtained by calling the `thread_join' function on the returned
+  Thread_Type object from this function. All arguments after the first
+  are sent in the same order to the referenced function.
+
+  The Thread_Type object returned by `thread' is a struct type which
+  stores the thread id (tid; global count of spawned threads), the pid
+  (pid) of the thread sub-process, the file descriptor (fd) where the
+  functions return value can be read and the status (stat), a boolean
+  indicating if the function returned normally (1) or with an error
+  (0), in which case `thread_join' will return NULL.
+
+  Note that these "threads" are processes and not POSIX like
+  threads. Modern fork implementations are very fast at creation
+  because of copy-on-write memory but can be substantially slower than
+  shared memory threads. As work loads an execution time increase this
+  becomes far less of a concern. Other important considerations are
+  that these threads do not share memory (in the sense that writes are
+  not seen by the parent or other threads, they share the memory of
+  the parent at creation time). Because they communicate the return
+  values via socket pairs, there is usually a system set limit for the
+  number that can be active (not yet joined).
+
+ EXAMPLE
+  In the following completely trivial example, we show the
+  asynchronous nature of the `thread' function:
+
+    t1=thread(&sleep,10);
+    vmessage("spawned a sleeping process with pid %d",t1.pid);
+    t2=thread(&sleep,10);
+    vmessage("spawned another sleeping process with pid %d",t2.pid);
+    tic;
+    sleep(10);
+    thread_join(t1);
+    thread_join(t2);
+    toc;
+
+  the toc at the end should report the code took approximately 10
+  seconds to execute even though we have slept a cumulitive 30
+  seconds.
+
+ SEE ALSO
+  thread_join, thread_select, thread_map, thread_stop
+
+----------------------------------------------------------------------
+
+thread_join
+
+ SYNOPSIS
+  Obtain the return result of a thread, blocking if necessary
+
+ USAGE
+  Any_Type ret=thread_join(Thread_Type t)
+
+ DESCRIPTION
+
+  The `thread_join' function block the calling process until the
+  return value of the input Thread_Type argument t can be read from
+  its associated pipe file descriptor. It will then return to the
+  calling process that return value. In that way, calling like
+
+   ret=thread_join(thread(&function,arg));
+
+  is semantically equivalent to simply calling
+
+   ret=function(arg);
+
+  Threads can only be joined once. It is an error to attempt a second
+  join on a thread.
+
+ SEE ALSO
+  thread_select, thread, thread_map, thread_stop
+
+----------------------------------------------------------------------
+
+thread_select
+
+ SYNOPSIS
+  select the next thread whose work is completed
+
+ USAGE
+  Int_Type index = thread_select(Thread_Type[] tlist)
+
+ DESCRIPTION
+  The `thread_select' function returns an index list of threads that
+  are ready to be joined immediately. The indeces returned correspond
+  to items in the input `tlist' list of threads. If no threads are
+  ready, or all threads have already been joined, a zero length list
+  is returned. This function will not error if the input argument is a
+  list of `Thread_Type' objects.
+
+ EXAMPLE
+  Make an array of threads of length _NUM_CPU and keep them busy as
+  much as possible until we have created MAX_CREATE threads.
+
+    t=Thread_Type[_NUM_CPU];
+    _for i (0,_NUM_CPU-1,1){
+        t[i]=thread(&function,args);
+    }
+    c=_NUM_CPU;
+    while (c<MAX_CREATE){
+        tids=thread_select(t);
+	_for i (0,length(tids)-1,1){
+	    %
+	    % get return value, and perhaps do something with it
+	    %
+	    ret=thread_join(t[tids[i]]);
+	    %
+	    % add more work
+	    %	    
+    	    t[tids[i]]=thread(&function,args);
+	    c++;
+	}
+     }
+
+  This code is quite similar to what thread_map does in order to keep
+  all requested cpus busy without delay.
+
+ SEE ALSO
+  thread_map, thread, thread_join
+
+----------------------------------------------------------------------
+
+thread_map
+
+ SYNOPSIS
+  Map array of input arguments to multiple asynchronous threads
+
+ USAGE
+  Any_Type[] result = thread_map(DataType_Type type, Ref_Type fun, args....)
+
+ DESCRIPTION
+  The `thread_map' function is a threaded version of the `array_map'
+  function that is native to SLang. A return data type, function
+  reference, and any number of arguments are passed, the referenced
+  function is called individually on all elements of the first
+  non-unity length argument. The return value is an array the same
+  length as that argument each element containing the return value of
+  the referenced function.
+
+  Thread map accepts a qualifier "ncpu", which tells it how many
+  simultaneous threads of control to create at a time. This defaults
+  to the number of CPUs on the system.
+
+ EXAMPLE
+  Suppose we have a simulation defined in the function "sim", which
+  takes a single parameter as its initial condition. We need to run
+  1000 simulations to understand our confidence in the results. Lets
+  derive the parameter from a gaussian distribution:
+
+    params = rand_gauss(0.1,1000)+0.3;
+    results = thread_map(Double_Type, &sim, params);
+
+  To illustrate the use of the "ncpu" qualifier, lets look at the
+  trivial sleep example:
+
+    tic;() = thread_map(Null_Type, &sleep, [2,2,2,2]; ncpu=4); toc;
+    2.014438
+
+    tic;() = thread_map(Null_Type, &sleep, [2,2,2,2]; ncpu=2); toc;
+    4.012834
+
+  With 4 input arguments and 4 cpus, we can run all sleeps
+  simultaneously, so the total time is 2 seconds (plus overhead). With
+  only 2 cpus used at a time (or, in this case 3 as well), we need to
+  wait for the first set to run before launching the next.
+
+ SEE ALSO
+  thread, thread_join, thread_stop, thread_select, array_map
+
+----------------------------------------------------------------------
+
